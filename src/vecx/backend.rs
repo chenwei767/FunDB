@@ -64,7 +64,7 @@ where
 
     /// Imitate the behavior of 'Vec<_>.get(...)'
     ///
-    /// Any faster/better choice other than JSON ?
+    /// Any faster/better choice other than JSON ? Codec without metadata and with numeric compacting. TODO
     #[inline(always)]
     pub(super) fn get(&self, idx: usize) -> Option<T> {
         self.db
@@ -109,8 +109,11 @@ where
 
     /// Imitate the behavior of '.iter()'
     #[inline(always)]
-    pub(super) fn iter(&self) -> VecxIter<T> {
-        todo!()
+    pub(super) fn iter(&self) -> VecxIter<T> { // TODO
+        VecxIter {
+            iter: self.db.iter(),
+            _pd: PhantomData::default(),
+        }
     }
 
     /// Flush data to disk
@@ -187,7 +190,8 @@ impl<T> PartialEq for Vecx<T>
 where
     T: PartialEq + Clone + Serialize + DeserializeOwned + std::fmt::Debug,
 {
-    fn eq(&self, other: &Vecx<T>) -> bool {
+    fn eq(&self, other: &Vecx<T>) -> bool { // TODO
+        self.cnter == other.cnter &&
         !self.iter().zip(other.iter()).any(|(i, j)| i != j)
     }
 }

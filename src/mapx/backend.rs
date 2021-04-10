@@ -121,8 +121,12 @@ where
 
     // Imitate the behavior of '.iter()'
     #[inline(always)]
-    pub(super) fn iter(&self) -> MapxIter<K, V> {
-        todo!()
+    pub(super) fn iter(&self) -> MapxIter<K, V> { // TODO
+        MapxIter {
+            iter: self.db.iter(),
+            _pd0: Default::default(),
+            _pd1: Default::default()
+        }
     }
 
     pub(super) fn contains_key(&self, key: &K) -> bool {
@@ -177,7 +181,12 @@ where
 {
     type Item = (K, V);
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        self.iter.next().map(|v| v.ok()).flatten().map(|(k,v )| { // TODO
+            (
+                pnk!(bincode::deserialize(k.as_ref())),
+                pnk!(serde_json::from_slice(v.as_ref())),
+            )
+        })
     }
 }
 
@@ -187,7 +196,12 @@ where
     V: Clone + Eq + PartialEq + Serialize + DeserializeOwned + fmt::Debug,
 {
     fn next_back(&mut self) -> Option<Self::Item> {
-        todo!()
+        self.iter.next_back().map(|v| v.ok()).flatten().map(|(k,v )| { // TODO
+            (
+                pnk!(bincode::deserialize(k.as_ref())),
+                pnk!(serde_json::from_slice(v.as_ref())),
+            )
+        })
     }
 }
 
@@ -211,8 +225,11 @@ where
     K: Clone + Eq + PartialEq + Hash + Serialize + DeserializeOwned + fmt::Debug,
     V: Clone + Eq + PartialEq + Serialize + DeserializeOwned + fmt::Debug,
 {
-    fn eq(&self, other: &Mapx<K, V>) -> bool {
-        todo!()
+    fn eq(&self, other: &Mapx<K, V>) -> bool { // TODO
+        self.cnter == other.cnter &&
+        !self.iter().zip(other.iter()).any(|((self_k, self_v), (other_k, other_v))| {
+            self_k != other_k || self_v != other_v
+        })
     }
 }
 

@@ -43,7 +43,7 @@ where
     V: Clone + Eq + PartialEq + Serialize + DeserializeOwned + fmt::Debug,
 {
     in_mem: HashMap<K, V>,
-    in_mem_cnt: usize,
+    in_mem_max_cnt: usize,
     in_disk: backend::Mapx<K, V>,
 }
 
@@ -61,8 +61,8 @@ where
     pub fn new(path: String, imc: Option<usize>, is_tmp: bool) -> Result<Self> {
         let in_disk = backend::Mapx::load_or_create(path, is_tmp).c(d!())?;
 
-        let mut in_mem = HashMap::with_capacity(IN_MEM_CNT);
-        let mut cnter = IN_MEM_CNT;
+        let mut in_mem = HashMap::with_capacity(imc.unwrap_or(IN_MEM_CNT)); // TODO
+        let mut cnter = imc.unwrap_or(IN_MEM_CNT); // TODO
         let mut data = in_disk.iter().rev();
         while cnter > 0 {
             if let Some((k, v)) = data.next() {
@@ -75,7 +75,7 @@ where
 
         Ok(Mapx {
             in_mem,
-            in_mem_cnt: imc.unwrap_or(IN_MEM_CNT),
+            in_mem_max_cnt: imc.unwrap_or(IN_MEM_CNT),
             in_disk,
         })
     }
@@ -162,7 +162,9 @@ where
     /// Imitate the behavior of '.iter()'
     #[inline(always)]
     pub fn iter(&self) -> Box<dyn Iterator<Item = (K, V)> + '_> {
-        todo!()
+        Box::new(MapxIter {
+            iter: self.in_disk.iter(),
+        })
     }
 
     /// Check if a key is exists.
@@ -422,7 +424,7 @@ where
         S: serde::Serializer,
     {
         let v = pnk!(serde_json::to_string(&FunDBMeta {
-            in_mem_cnt: self.in_mem_cnt,
+            in_mem_cnt: self.in_mem_max_cnt,
             data_path: self.get_data_path(),
         }));
 

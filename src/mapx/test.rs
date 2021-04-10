@@ -46,12 +46,17 @@ fn t_mapx() {
         pnk!(serde_json::to_vec(&db))
     };
 
-    let mut db_restore = pnk!(serde_json::from_slice::<Mapx<usize, SampleBlock>>(&db));
+    let mut db_restore: Mapx<usize, SampleBlock> = pnk!(serde_json::from_slice::<Mapx<usize, SampleBlock>>(&db));
 
     assert_eq!(cnt, db_restore.len());
 
     (0..cnt).for_each(|i| {
         assert_eq!(i, db_restore.get(&i).unwrap().idx);
+    });
+
+    db_restore.iter().zip(0..cnt).for_each(|((k, v),c)|{ // TODO
+        assert_eq!(k, c);
+        assert_eq!(v, SampleBlock{ idx: c, data: vec![c] });
     });
 
     (0..cnt).for_each(|i| {

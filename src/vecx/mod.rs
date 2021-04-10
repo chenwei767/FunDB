@@ -41,7 +41,7 @@ where
     T: Eq + PartialEq + Clone + Serialize + DeserializeOwned + fmt::Debug,
 {
     in_mem: BTreeMap<usize, T>,
-    in_mem_cnt: usize,
+    in_mem_max_cnt: usize,
     in_disk: backend::Vecx<T>,
 }
 
@@ -60,7 +60,7 @@ where
         let mut in_mem = BTreeMap::new();
 
         if !in_disk.is_empty() {
-            let mut lefter = IN_MEM_CNT;
+            let mut lefter = imc.unwrap_or(IN_MEM_CNT); // TODO
             let mut data = in_disk.iter().rev();
             while lefter > 0 {
                 if let Some((idx, v)) = data.next() {
@@ -74,7 +74,7 @@ where
 
         Ok(Vecx {
             in_mem,
-            in_mem_cnt: imc.unwrap_or(IN_MEM_CNT),
+            in_mem_max_cnt: imc.unwrap_or(IN_MEM_CNT),
             in_disk,
         })
     }
@@ -130,8 +130,23 @@ where
 
     /// Imitate the behavior of '.iter()'
     #[inline(always)]
-    pub fn iter(&self) -> Box<dyn Iterator<Item = T> + '_> {
-        todo!()
+    pub fn iter(&self) -> Box<dyn Iterator<Item = T> + '_> { // TODO
+        Box::new(VecxIter {
+            iter: self.in_disk.iter(),
+            mem_iter: self.in_mem.iter(),
+            disk_iter_cnt: self.len() - self.in_mem.len(),
+            #[cfg(test)] mem_hits: 0,
+        })
+    }
+
+    #[cfg(test)]
+    pub fn iter_test(&self) -> VecxIter<'_, usize, T> { // TODO
+        VecxIter {
+            iter: self.in_disk.iter(),
+            mem_iter: self.in_mem.iter(),
+            disk_iter_cnt: self.len() - self.in_mem.len(),
+            mem_hits: 0,
+        }
     }
 
     /// Flush data to disk
@@ -150,20 +165,36 @@ where
 /************************************************/
 
 /// Iter over [Vecx](self::Vecx).
-pub struct VecxIter<T>
+pub struct VecxIter<'a, K, T>
 where
-    T: Eq + PartialEq + Clone + Serialize + DeserializeOwned + fmt::Debug,
+    K: 'a,
+    T: 'a + Eq + PartialEq + Clone + Serialize + DeserializeOwned + fmt::Debug,
 {
     iter: backend::VecxIter<T>,
+    mem_iter: btree_map::Iter<'a, K, T>,
+    disk_iter_cnt: usize,
+    #[cfg(test)]
+    mem_hits: usize,
 }
 
-impl<T> Iterator for VecxIter<T>
+impl<'a, K, T> Iterator for VecxIter<'a, K, T>
 where
-    T: Eq + PartialEq + Clone + Serialize + DeserializeOwned + fmt::Debug,
+    K: 'a,
+    T: 'a + Eq + PartialEq + Clone + Serialize + DeserializeOwned + fmt::Debug,
 {
     type Item = T;
-    fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+    fn next(&mut self) -> Option<Self::Item> { // TODO
+        if self.disk_iter_cnt == 0 {
+            self.mem_iter.next().map(|(_, v)| {
+                #[cfg(test)] { self.mem_hits += 1; }
+                v.clone()
+            })
+        } else {
+            self.iter.next().map(|(_, v)| {
+                self.disk_iter_cnt -= 1;
+                v
+            })
+        }
     }
 }
 
@@ -181,8 +212,10 @@ where
     T: Eq + PartialEq + Clone + Serialize + DeserializeOwned + fmt::Debug,
 {
     type Item = T;
-    fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+    fn next(&mut self) -> Option<Self::Item> { // TODO
+        self.iter.next().map(|(_, v)| {
+            v.clone()
+        })
     }
 }
 
@@ -203,7 +236,7 @@ where
         S: serde::Serializer,
     {
         let v = pnk!(serde_json::to_string(&FunDBMeta {
-            in_mem_cnt: self.in_mem_cnt,
+            in_mem_cnt: self.in_mem_max_cnt,
             data_path: self.get_data_path(),
         }));
 

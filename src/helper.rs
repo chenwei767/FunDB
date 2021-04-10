@@ -6,11 +6,14 @@ use lazy_static::lazy_static;
 use ruc::*;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{borrow::Cow, cmp::Ordering, convert::TryInto, env, fmt, fs, mem, ops::Deref};
+use std::io::{Write, Read};
 
 lazy_static! {
+    /// The base directory for `unique_path!`
     pub static ref CACHE_DIR: String = env::var("FUNDB_DIR").unwrap_or_else(|_| "/tmp".to_owned());
 }
 
+/// Execute `expr` maybe with a retry.
 #[macro_export]
 macro_rules! try_twice {
     ($ops: expr) => {
@@ -21,6 +24,7 @@ macro_rules! try_twice {
     };
 }
 
+/// Generate a unique path for crating file.
 #[macro_export]
 macro_rules! unique_path {
     () => {
@@ -36,6 +40,7 @@ macro_rules! unique_path {
     };
 }
 
+/// Create a disk vec `vecx` optionally with cache.
 #[macro_export]
 macro_rules! new_vecx {
     ($ty: ty, $in_mem_cnt: expr) => {
@@ -52,6 +57,7 @@ macro_rules! new_vecx {
     };
 }
 
+/// Create a disk vec `vecx` optionally with cache.
 #[macro_export]
 macro_rules! new_vecx_custom {
     ($ty: ty, $in_mem_cnt: expr, $is_tmp: expr) => {{
@@ -75,6 +81,7 @@ macro_rules! new_vecx_custom {
     };
 }
 
+/// Create a disk btree map `mapx` optionally with cache.
 #[macro_export]
 macro_rules! new_mapx {
     ($ty: ty, $in_mem_cnt: expr) => {
@@ -91,6 +98,7 @@ macro_rules! new_mapx {
     };
 }
 
+/// Create a disk btree map `mapx` optionally with cache.
 #[macro_export]
 macro_rules! new_mapx_custom {
     ($ty: ty, $in_mem_cnt: expr, $is_tmp: expr) => {{
@@ -152,7 +160,7 @@ where
     type Target = V;
 
     fn deref(&self) -> &Self::Target {
-        todo!()
+        &self.value // TODO
     }
 }
 
@@ -161,7 +169,7 @@ where
     V: Clone + Eq + PartialEq + Serialize + DeserializeOwned + fmt::Debug,
 {
     fn eq(&self, other: &Value<'a, V>) -> bool {
-        todo!()
+        *self.value == *other.value // TODO
     }
 }
 
@@ -170,7 +178,7 @@ where
     V: Clone + Eq + PartialEq + Serialize + DeserializeOwned + fmt::Debug,
 {
     fn eq(&self, other: &V) -> bool {
-        todo!()
+        *self.value == *other // TODO
     }
 }
 
@@ -179,7 +187,7 @@ where
     V: fmt::Debug + Clone + Eq + PartialEq + Ord + PartialOrd + Serialize + DeserializeOwned,
 {
     fn partial_cmp(&self, other: &V) -> Option<Ordering> {
-        todo!()
+        (*self.value).partial_cmp(other) // TODO
     }
 }
 
@@ -188,7 +196,7 @@ where
     V: Clone + Eq + PartialEq + Serialize + DeserializeOwned + fmt::Debug,
 {
     fn from(v: V) -> Self {
-        todo!()
+        Self { value: Cow::Owned(v) } // TODO
     }
 }
 
@@ -197,7 +205,7 @@ where
     V: Clone + Eq + PartialEq + Serialize + DeserializeOwned + fmt::Debug,
 {
     fn from(v: Cow<'a, V>) -> Self {
-        todo!()
+        Self { value: v } // TODO
     }
 }
 
@@ -206,16 +214,16 @@ where
     V: Clone + Eq + PartialEq + Serialize + DeserializeOwned + fmt::Debug,
 {
     fn from(v: Value<'a, V>) -> Self {
-        todo!()
+        v.value // TODO
     }
 }
 
-impl<'a, V> From<&V> for Value<'a, V>
+impl<'a, V> From<&'a V> for Value<'a, V>
 where
     V: Clone + Eq + PartialEq + Serialize + DeserializeOwned + fmt::Debug,
 {
-    fn from(v: &V) -> Self {
-        todo!()
+    fn from(v: &'a V) -> Self {
+        Self { value: Cow::<'a, _>::Borrowed(v) } // TODO
     }
 }
 
@@ -224,16 +232,36 @@ where
 //////////////////////////////////////////////////////////////////////////////
 
 #[inline(always)]
-pub(crate) fn sled_open(path: &str, is_tmp: bool) -> Result<sled::Db> {
-    todo!()
+pub(crate) fn sled_open(path: &str, is_tmp: bool) -> Result<sled::Db> { // TODO
+    let config = sled::Config::new().temporary(is_tmp).path(path);
+    config.open().c(d!())
 }
 
 #[inline(always)]
-pub(crate) fn read_db_len(path: &str) -> Result<usize> {
-    todo!()
+pub(crate) fn read_db_len(path: &str) -> Result<usize> { // TODO
+    let mut file = fs::File::open(path).c(d!())?;
+
+    let mut buffer = [0; mem::size_of::<usize>() * 2];
+    file.read(&mut buffer).c(d!())?;
+
+    let len = usize::from_le_bytes(TryInto::<[u8; mem::size_of::<usize>()]>::try_into(&buffer[..mem::size_of::<usize>()]).c(d!())?);
+    let len_check = usize::from_le_bytes(TryInto::<[u8; mem::size_of::<usize>()]>::try_into(&buffer[mem::size_of::<usize>()..]).c(d!())?);
+    if len != len_check {
+        Err(eg!(format!("file '{}' was corrupted", path)))
+    }else {
+        Ok(len)
+    }
 }
 
 #[inline(always)]
-pub(crate) fn write_db_len(path: &str, len: usize) -> Result<()> {
-    todo!()
+pub(crate) fn write_db_len(path: &str, len: usize) -> Result<()> { // TODO
+    let mut file = fs::OpenOptions::new().write(true).create_new(false).open(path).c(d!())?;
+    let len = len.to_le_bytes();
+
+    let mut data = Vec::with_capacity(mem::size_of::<usize>() * 2);
+    data.extend(&len);
+    data.extend(&len);
+
+    file.write_all(&data).c(d!())?;
+    Ok(())
 }
